@@ -2,7 +2,6 @@ const { addonBuilder } = require('stremio-addon-sdk');
 const { providers, catalogs, getChannel } = require('./providers');
 const pkg = require('../package.json');
 
-const PAGE_SIZE = 100;
 const ID_PREFIX = 'slyguy.';
 
 // Dot-separated so the IDs are also valid file names for the static (GitHub Pages) build
@@ -47,63 +46,38 @@ function toMetaPreview(providerId, region, ch) {
     };
 }
 
-function sortChannels(channels) {
-    return [...channels].sort((a, b) => (a.chno ?? Infinity) - (b.chno ?? Infinity) || a.name.localeCompare(b.name));
-}
-
 async function buildManifest(staticMode) {
     return {
         id: staticMode ? 'community.slyguy.livetv.pages' : 'community.slyguy.livetv',
         version: pkg.version,
         name: 'SlyGuy Live TV',
-        description: 'Free Australian and New Zealand live TV (Freeview and Plex), using the channel sources of the SlyGuy Kodi addons.',
+        description: 'Top 15 Freeview channels for Australia and New Zealand, using the channel sources of the SlyGuy Kodi addons.',
         logo: 'https://raw.githubusercontent.com/matthuisman/slyguy.addons/master/repository.slyguy/icon.png',
         resources: ['catalog', 'meta', 'stream'],
         types: ['tv'],
         idPrefixes: [ID_PREFIX],
-        catalogs: catalogs.map((catalog) => ({
-            type: 'tv',
-            id: catalog.id,
-            name: catalog.name,
-            // A static host can't answer arbitrary searches, so the static build only offers genres
-            extra: [
-                { name: 'genre', options: catalog.sources.map(([, , label]) => label) },
-                ...(staticMode ? [] : [{ name: 'search' }, { name: 'skip' }]),
-            ],
-        })),
+        catalogs: catalogs.map((catalog) => ({ type: 'tv', id: catalog.id, name: catalog.name, extra: [] })),
         behaviorHints: { configurable: false },
     };
 }
 
-// staticMode: build for a static host (GitHub Pages). Streams then point straight at the
-// upstream URL and rely on Stremio's streaming server to send the provider headers.
+// staticMode: build for a static host (GitHub Pages). Only the manifest ID differs; streams
+// still point at the local proxy, which has to be running for playback.
 async function createAddon(baseUrl, { staticMode = false } = {}) {
     const builder = new addonBuilder(await buildManifest(staticMode));
 
-    builder.defineCatalogHandler(async ({ id, extra }) => {
+    builder.defineCatalogHandler(async ({ id }) => {
         const catalog = catalogs.find((c) => c.id === id);
         if (!catalog) return { metas: [] };
-
+        const regions = await providers[catalog.provider].load();
+        const channels = regions[catalog.region] ? regions[catalog.region].channels : [];
         const metas = [];
-        for (const [providerId, region, label] of catalog.sources) {
-            if (extra.genre && extra.genre !== label) continue;
-            let channels;
-            try {
-                const regions = await providers[providerId].load();
-                channels = regions[region] ? regions[region].channels : [];
-            } catch (err) {
-                console.error(`[catalog] ${providerId}/${region}: ${err.message}`);
-                continue;
-            }
-            if (extra.search) {
-                const q = extra.search.toLowerCase();
-                channels = channels.filter((ch) => `${ch.name} ${ch.chno ?? ''} ${ch.group ?? ''}`.toLowerCase().includes(q));
-            }
-            metas.push(...sortChannels(channels).map((ch) => toMetaPreview(providerId, region, ch)));
+        for (const name of catalog.channels) {
+            const ch = channels.find((c) => c.name === name);
+            if (ch) metas.push(toMetaPreview(catalog.provider, catalog.region, ch));
+            else console.warn(`[catalog] ${catalog.id}: no channel named ${JSON.stringify(name)}`);
         }
-
-        const skip = Number(extra.skip) || 0;
-        return { metas: staticMode ? metas : metas.slice(skip, skip + PAGE_SIZE), cacheMaxAge: 5 * 60 };
+        return { metas, cacheMaxAge: 5 * 60 };
     });
 
     builder.defineMetaHandler(async ({ id }) => {
@@ -128,25 +102,11 @@ async function createAddon(baseUrl, { staticMode = false } = {}) {
         const { providerId, region, id: channelId } = parseMetaId(id);
         const found = await getChannel(providerId, region, channelId);
         if (!found) return { streams: [] };
-        const proxied = {
-            url: `${baseUrl}/hls/${providerId}/${encodeURIComponent(region)}/${encodeURIComponent(channelId)}/index.m3u8`,
-            name: found.provider.name,
-            title: `${found.ch.name}\nLive`,
-        };
-        if (!staticMode) return { streams: [proxied] };
-
-        // The local proxy is the stream that plays in web Stremio; the direct one relies on the
-        // streaming server's proxyHeaders, which web Stremio can't use for live HLS.
-        const { url, headers } = await found.provider.direct(region, found.ch);
         return {
             streams: [{
-                ...proxied,
-                title: `${found.ch.name}\nLive (needs npm start)`,
-            }, {
-                url,
-                name: `${found.provider.name}\nDirect`,
-                title: `${found.ch.name}\nDirect (Stremio desktop app only)`,
-                behaviorHints: { notWebReady: true, proxyHeaders: { request: headers } },
+                url: `${baseUrl}/hls/${providerId}/${encodeURIComponent(region)}/${encodeURIComponent(channelId)}/index.m3u8`,
+                name: found.provider.name,
+                title: `${found.ch.name}\nLive`,
             }],
         };
     });

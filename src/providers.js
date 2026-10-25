@@ -1,5 +1,5 @@
 // Channel sources, ported from the SlyGuy Kodi addons (github.com/matthuisman/slyguy.addons).
-// Australian and New Zealand live TV: AU Freeview, NZ Freeview and Plex Live TV.
+// Australian and New Zealand Freeview live TV.
 // Each provider loads Matt Huisman's i.mjh.nz channel feed and normalises it into:
 //   { id, name, logo, background, description, group, chno, programs, headers }
 // plus a resolve() that returns the upstream playback URL and headers for a channel.
@@ -105,55 +105,33 @@ const nz = {
     },
 };
 
-// --- Plex Live TV (slyguy.plex.live) -------------------------------------
+const providers = { au, nz };
 
-const plex = {
-    id: 'plex',
-    name: 'Plex Live TV',
-    async load() {
-        const data = await fetchJson('https://i.mjh.nz/Plex/.channels.json.gz');
-        const regions = {};
-        for (const [code, region] of Object.entries(data.regions)) {
-            regions[code] = { name: region.name, channels: [] };
-        }
-        for (const [id, ch] of Object.entries(data.channels)) {
-            for (const code of ch.regions || []) {
-                if (!regions[code]) continue;
-                regions[code].channels.push({
-                    id,
-                    name: ch.name,
-                    logo: ch.logo,
-                    description: ch.description,
-                    group: ch.group,
-                    programs: ch.programs,
-                    // region headers (X-Forwarded-For) pick the Plex lineup, as in the Kodi addon
-                    headers: mergeHeaders(data.headers, data.regions[code].headers),
-                });
-            }
-        }
-        return regions;
-    },
-    async resolve(region, ch) {
-        return { url: `https://jmp2.uk/plex-${ch.id}.m3u8`, headers: ch.headers };
-    },
-    // jmp2.uk adds its own Plex token, so keep the feed's token out of the published files
-    async direct(region, ch) {
-        const { 'x-plex-token': token, ...headers } = ch.headers;
-        return { url: `https://jmp2.uk/plex-${ch.id}.m3u8`, headers };
-    },
-};
-
-const providers = { au, nz, plex };
-
-// The two Stremio catalogs, each merging several sources: [provider, region, genre label]
+// The two Stremio catalogs: a curated Freeview top 15 per country, in this order.
+// Channels are matched by their name in the i.mjh.nz feed, so they survive ID changes
+// and a different AU_CITY. TVNZ 1, TVNZ 2 and DUKE are Widevine-protected, so they can't
+// be included.
 const catalogs = [
-    { id: 'slyguy-australia', name: 'Australia', sources: [['au', AU_CITY, 'Freeview'], ['plex', 'au', 'Plex']] },
-    { id: 'slyguy-nz', name: 'New Zealand', sources: [['nz', 'all', 'Freeview'], ['plex', 'nz', 'Plex']] },
+    {
+        id: 'slyguy-australia',
+        name: 'Australia Top 15',
+        provider: 'au',
+        region: AU_CITY,
+        channels: ['Seven', 'Channel 9', 'ABC TV', '10', 'SBS', 'ABC NEWS', '7mate', '7two', '9Gem', '9Go!',
+            '7flix', 'SBS World Movies', 'SBS Food', 'ABC Kids', 'ABC Family', 'NITV'],
+    },
+    {
+        id: 'slyguy-nz',
+        name: 'New Zealand Top 15',
+        provider: 'nz',
+        region: 'all',
+        channels: ['Three', 'Sky Open', 'Bravo', 'Whakaata Māori', 'RUSH', 'eden', 'HGTV', 'Al Jazeera',
+            'Te Reo', 'Trackside 1', 'Trackside 2', 'Parliament TV'],
+    },
 ];
 
 // Normalised channel lists are cached per provider; see cached() for refresh behaviour.
 for (const provider of Object.values(providers)) {
-    provider.direct = provider.direct || provider.resolve;
     const load = provider.load.bind(provider);
     provider.load = () => cached(`load-${provider.id}`, CACHE_TTL, load);
 }
