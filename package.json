@@ -1,7 +1,7 @@
 {
   "name": "stremio-slyguy-live",
   "version": "1.0.0",
-  "description": "Stremio addon for free Live TV, using the same channel sources as the SlyGuy Kodi addons (Pluto TV, Samsung TV Plus, Plex, Roku, AU/NZ Freeview)",
+  "description": "Stremio addon for free Australian and New Zealand live TV (Freeview and Plex), using the channel sources of the SlyGuy Kodi addons",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

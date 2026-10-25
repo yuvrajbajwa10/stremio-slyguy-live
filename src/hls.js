@@ -39,6 +39,7 @@ async function proxy(req, res, upstreamUrl, headers, prefix) {
     res.set('Cache-Control', 'no-cache');
 
     if (!upstream.ok && upstream.status !== 206) {
+        console.error(`[hls] upstream ${upstream.status} for ${upstreamUrl} (${req.method}, range=${req.headers.range || '-'})`);
         res.status(upstream.status).send(`Upstream ${upstream.status}`);
         return;
     }
@@ -52,7 +53,9 @@ async function proxy(req, res, upstreamUrl, headers, prefix) {
         const buf = Buffer.from(await upstream.arrayBuffer());
         const text = buf.toString('utf8');
         if (isPlaylist(upstream, finalUrl, text.slice(0, 16).replace(/^﻿/, ''))) {
-            res.type('application/vnd.apple.mpegurl').send(rewritePlaylist(text, finalUrl, prefix));
+            // Exact type with no charset: Stremio's web player only hands the stream to hls.js
+            // when the HEAD content-type equals 'application/vnd.apple.mpegurl'
+            res.set('Content-Type', 'application/vnd.apple.mpegurl').send(Buffer.from(rewritePlaylist(text, finalUrl, prefix)));
             return;
         }
         res.status(upstream.status);
@@ -83,6 +86,14 @@ function mount(app) {
     app.get('/hls/:provider/:region/:id/:target', async (req, res) => {
         const { provider: providerId, region, target } = req.params;
         const id = decodeURIComponent(req.params.id);
+        // When Stremio's streaming server is running, the web player probes the stream with ffmpeg
+        // (user-agent Lavf/...) and, on success, routes it through its hlsv2 converter, which rejects
+        // live streams ("Live media is not supported"). Failing the probe makes it play the HLS
+        // directly in the browser instead.
+        if (target === 'index.m3u8' && /^Lavf\//.test(req.headers['user-agent'] || '')) {
+            res.status(403).send('Live stream: play directly');
+            return;
+        }
         try {
             const found = await getChannel(providerId, region, id);
             if (!found) {

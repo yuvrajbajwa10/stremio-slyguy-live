@@ -1,5 +1,5 @@
 const { addonBuilder } = require('stremio-addon-sdk');
-const { providers, getChannel } = require('./providers');
+const { providers, catalogs, getChannel } = require('./providers');
 const pkg = require('../package.json');
 
 const PAGE_SIZE = 100;
@@ -52,39 +52,25 @@ function sortChannels(channels) {
 }
 
 async function buildManifest(staticMode) {
-    const catalogs = [];
-    for (const provider of Object.values(providers)) {
-        // A static host can't answer arbitrary searches, so the static build only offers genres
-        const extra = staticMode ? [] : [{ name: 'search' }, { name: 'skip' }];
-        try {
-            const regions = await provider.load();
-            if (provider.genreMode === 'region') {
-                const codes = Object.keys(regions).filter((c) => !staticMode || !provider.staticRegions || provider.staticRegions.includes(c)).sort((a, b) => regions[a].name.localeCompare(regions[b].name));
-                const def = codes.includes(provider.defaultRegion) ? provider.defaultRegion : codes[0];
-                provider.regionOptions = Object.fromEntries(codes.map((c) => [regions[c].name, c]));
-                provider.regionDefault = regions[def].name;
-                extra.push({ name: 'genre', options: [regions[def].name, ...codes.filter((c) => c !== def).map((c) => regions[c].name)] });
-            } else {
-                const groups = new Set();
-                for (const ch of regions.all.channels) (ch.groups || [ch.group]).filter(Boolean).forEach((g) => groups.add(g));
-                if (groups.size) extra.push({ name: 'genre', options: [...groups].sort() });
-            }
-        } catch (err) {
-            console.error(`[manifest] ${provider.id}: ${err.message}`);
-        }
-        catalogs.push({ type: 'tv', id: `slyguy-${provider.id}`, name: provider.name, extra });
-    }
-
     return {
         id: staticMode ? 'community.slyguy.livetv.pages' : 'community.slyguy.livetv',
         version: pkg.version,
         name: 'SlyGuy Live TV',
-        description: 'Free live TV channels from Pluto TV, Samsung TV Plus, Plex, The Roku Channel and AU/NZ Freeview, using the channel sources of the SlyGuy Kodi addons.',
+        description: 'Free Australian and New Zealand live TV (Freeview and Plex), using the channel sources of the SlyGuy Kodi addons.',
         logo: 'https://raw.githubusercontent.com/matthuisman/slyguy.addons/master/repository.slyguy/icon.png',
         resources: ['catalog', 'meta', 'stream'],
         types: ['tv'],
         idPrefixes: [ID_PREFIX],
-        catalogs,
+        catalogs: catalogs.map((catalog) => ({
+            type: 'tv',
+            id: catalog.id,
+            name: catalog.name,
+            // A static host can't answer arbitrary searches, so the static build only offers genres
+            extra: [
+                { name: 'genre', options: catalog.sources.map(([, , label]) => label) },
+                ...(staticMode ? [] : [{ name: 'search' }, { name: 'skip' }]),
+            ],
+        })),
         behaviorHints: { configurable: false },
     };
 }
@@ -95,30 +81,29 @@ async function createAddon(baseUrl, { staticMode = false } = {}) {
     const builder = new addonBuilder(await buildManifest(staticMode));
 
     builder.defineCatalogHandler(async ({ id, extra }) => {
-        const provider = providers[id.replace(/^slyguy-/, '')];
-        if (!provider) return { metas: [] };
-        const regions = await provider.load();
+        const catalog = catalogs.find((c) => c.id === id);
+        if (!catalog) return { metas: [] };
 
-        let region = 'all';
-        let channels;
-        if (provider.genreMode === 'region') {
-            const regionName = extra.genre || provider.regionDefault;
-            region = (provider.regionOptions || {})[regionName] || provider.defaultRegion;
-            channels = regions[region] ? regions[region].channels : [];
-        } else {
-            channels = regions.all.channels;
-            if (extra.genre) channels = channels.filter((ch) => (ch.groups || [ch.group]).includes(extra.genre));
-        }
-
-        if (extra.search) {
-            const q = extra.search.toLowerCase();
-            channels = channels.filter((ch) => `${ch.name} ${ch.chno ?? ''} ${ch.group ?? ''}`.toLowerCase().includes(q));
+        const metas = [];
+        for (const [providerId, region, label] of catalog.sources) {
+            if (extra.genre && extra.genre !== label) continue;
+            let channels;
+            try {
+                const regions = await providers[providerId].load();
+                channels = regions[region] ? regions[region].channels : [];
+            } catch (err) {
+                console.error(`[catalog] ${providerId}/${region}: ${err.message}`);
+                continue;
+            }
+            if (extra.search) {
+                const q = extra.search.toLowerCase();
+                channels = channels.filter((ch) => `${ch.name} ${ch.chno ?? ''} ${ch.group ?? ''}`.toLowerCase().includes(q));
+            }
+            metas.push(...sortChannels(channels).map((ch) => toMetaPreview(providerId, region, ch)));
         }
 
         const skip = Number(extra.skip) || 0;
-        const sorted = sortChannels(channels);
-        const page = staticMode ? sorted : sorted.slice(skip, skip + PAGE_SIZE);
-        return { metas: page.map((ch) => toMetaPreview(provider.id, region, ch)), cacheMaxAge: 5 * 60 };
+        return { metas: staticMode ? metas : metas.slice(skip, skip + PAGE_SIZE), cacheMaxAge: 5 * 60 };
     });
 
     builder.defineMetaHandler(async ({ id }) => {
@@ -150,17 +135,18 @@ async function createAddon(baseUrl, { staticMode = false } = {}) {
         };
         if (!staticMode) return { streams: [proxied] };
 
+        // The local proxy is the stream that plays in web Stremio; the direct one relies on the
+        // streaming server's proxyHeaders, which web Stremio can't use for live HLS.
         const { url, headers } = await found.provider.direct(region, found.ch);
         return {
             streams: [{
-                url,
-                name: found.provider.name,
-                title: `${found.ch.name}\nLive`,
-                behaviorHints: { notWebReady: true, proxyHeaders: { request: headers } },
-            }, {
                 ...proxied,
-                name: `${found.provider.name}\nLocal`,
-                title: `${found.ch.name}\nVia local proxy (npm start)`,
+                title: `${found.ch.name}\nLive (needs npm start)`,
+            }, {
+                url,
+                name: `${found.provider.name}\nDirect`,
+                title: `${found.ch.name}\nDirect (Stremio desktop app only)`,
+                behaviorHints: { notWebReady: true, proxyHeaders: { request: headers } },
             }],
         };
     });

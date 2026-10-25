@@ -1,60 +1,62 @@
 # SlyGuy Live TV for Stremio
 
-A Stremio addon that adds free live TV channels. It uses the same channel sources as the
-[SlyGuy Kodi addons](https://github.com/matthuisman/slyguy.addons): Matt Huisman's `i.mjh.nz`
+A Stremio addon with free Australian and New Zealand live TV. It uses the same channel sources as
+the [SlyGuy Kodi addons](https://github.com/matthuisman/slyguy.addons): Matt Huisman's `i.mjh.nz`
 feeds, with now/next EPG.
 
-| Catalog | Ported from | Filter (genre dropdown) |
+| Catalog | Sources (genre filter) | Ported from |
 |---|---|---|
-| Pluto TV | `slyguy.pluto.tv.provider` | Country (default USA) |
-| Samsung TV Plus | `slyguy.samsung.tv.plus` | Country (default United States) |
-| Plex Live TV | `slyguy.plex.live` | Country (default Australia) |
-| The Roku Channel | `slyguy.roku` | Category |
-| AU Freeview | `plugin.video.au.freeview` | City (default Melbourne) |
-| NZ Freeview | `plugin.video.nz.freeview` | – |
+| Australia | Freeview (Melbourne lineup: ABC, SBS, 7, 9, 10 and their FAST channels) and Plex Australia | `plugin.video.au.freeview`, `slyguy.plex.live` |
+| New Zealand | Freeview (TVNZ, Three, Whakaata Māori, ...) and Plex New Zealand | `plugin.video.nz.freeview`, `slyguy.plex.live` |
 
-DRM (Widevine) and DASH-only channels are skipped, as are the Samsung channels the Kodi addon
-also skips.
+DRM (Widevine) and DASH-only channels are skipped. Set `AU_CITY` (Sydney, Melbourne, Brisbane,
+Perth, Adelaide, Darwin, Hobart or Canberra) to use another city's Freeview lineup.
 
-## Install (GitHub Pages)
-
-Open https://yuvrajbajwa10.github.io/stremio-slyguy-live/ and click **Install in Stremio**, or
-paste `https://yuvrajbajwa10.github.io/stremio-slyguy-live/manifest.json` into Stremio's addon
-search box.
-
-The Pages copy is a static build that a GitHub Actions workflow regenerates every hour. Because
-there's no server behind it:
-
-- Streams go straight to the provider, and Stremio's streaming server sends the headers they need
-  (`proxyHeaders`). Keep the **Stremio desktop app** running, also when using web.stremio.com.
-- There's no search, Pluto TV lists US channels only, and the now/next guide can be up to an hour
-  old (times are shown in Australia/Melbourne time).
-- Each channel also offers a "Local" stream that uses the local server below, if it's running.
-- GitHub pauses scheduled workflows after 60 days without repository activity. If the guide stops
-  updating, re-enable the workflow from the Actions tab.
-
-To build the static copy yourself, run `npm run build` (output goes to `dist/`).
-
-## Run locally (full version, with search)
+## Run the local server (needed for playback)
 
 ```sh
 npm install
 npm start
 ```
 
-Then in Stremio (desktop app or https://web.stremio.com in Chrome) go to **Addons**, paste
-`http://127.0.0.1:7000/manifest.json` into the search/addon URL box, and press **Install**.
-The channels appear under **Discover → TV**.
+Streams play through a small HLS proxy in this server (see below), so it has to be running while
+you watch.
 
-The server has to keep running while you watch.
+## Install
+
+Either addon URL works, as long as `npm start` is running:
+
+- **Local:** `http://127.0.0.1:7000/manifest.json` (has search, guide is always current).
+- **GitHub Pages:** https://yuvrajbajwa10.github.io/stremio-slyguy-live/ (click **Install in
+  Stremio**). A static copy rebuilt hourly by GitHub Actions. No search, and the now/next guide
+  can be up to an hour old (times in Australia/Melbourne time).
+
+Install only one of them, or the channels appear twice. In Stremio, open **Discover → TV** and
+pick **Australia** or **New Zealand**.
+
+Each channel's first stream ("Live") uses the local proxy. The Pages build also lists a "Direct"
+stream that relies on the Stremio desktop app's streaming server to send the provider headers; it
+does not play in web.stremio.com.
+
+GitHub pauses scheduled workflows after 60 days without repository activity. If the Pages guide
+stops updating, re-enable the workflow from the Actions tab. To build the static copy yourself,
+run `npm run build` (output goes to `dist/`).
 
 ## How playback works
 
-The Kodi addons send provider-specific headers (user-agent, `x-forwarded-for` for the Pluto
-region, ...). A browser can't send these, and some CDNs (e.g. Pluto) return CORS headers that
-block web.stremio.com. So every stream goes through a small HLS proxy in this server
-(`/hls/...`). It fetches playlists and segments with the right headers, rewrites the playlist
-URIs and serves everything with `Access-Control-Allow-Origin: *`.
+The Kodi addons send provider-specific headers (user-agent, `x-forwarded-for` for the Plex
+region, ...). A browser can't send these, and several CDNs don't allow web.stremio.com via CORS.
+So every stream goes through the proxy (`/hls/...`), which fetches playlists and segments with the
+right headers, rewrites the playlist URIs and serves everything with
+`Access-Control-Allow-Origin: *`.
+
+Two details make it work in web Stremio:
+
+- The playlist is served as exactly `application/vnd.apple.mpegurl` (no charset). Stremio's web
+  player only uses hls.js when the content type matches exactly.
+- If the Stremio app's streaming server is running, the web player probes streams with ffmpeg and
+  sends playable ones through its converter, which rejects live streams. The proxy refuses that
+  probe (user-agent `Lavf/...`) so the player falls back to hls.js.
 
 ## Other devices
 
@@ -69,8 +71,6 @@ HTTPS tunnel (e.g. cloudflared) and to set `BASE_URL` to the tunnel URL.
 
 ## Known limitations
 
-- Channels are geo-restricted by the providers. NZ Freeview only works from NZ, AU Freeview
-  from AU, and many Samsung TV Plus channels return 403 outside their country.
-- Pluto TV and Plex choose the lineup with the `x-forwarded-for` header, as the Kodi addons
-  do. From Australia, Pluto USA and Plex Australia were tested and play. Samsung TV Plus has
-  no Australian lineup, so only some of its foreign channels play.
+- Channels are geo-restricted by the providers. From Australia, most NZ Freeview channels play,
+  but Three, Bravo, Sky Open, eden and Trackside are NZ-only.
+- Plex rate-limits heavy use (HTTP 429).

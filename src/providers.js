@@ -1,13 +1,14 @@
 // Channel sources, ported from the SlyGuy Kodi addons (github.com/matthuisman/slyguy.addons).
+// Australian and New Zealand live TV: AU Freeview, NZ Freeview and Plex Live TV.
 // Each provider loads Matt Huisman's i.mjh.nz channel feed and normalises it into:
 //   { id, name, logo, background, description, group, chno, programs, headers }
 // plus a resolve() that returns the upstream playback URL and headers for a channel.
 
 const zlib = require('zlib');
-const { randomUUID } = require('crypto');
 
 const CACHE_TTL = 15 * 60 * 1000;
-const AU_REGIONS = ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Darwin', 'Hobart', 'Canberra'];
+// AU Freeview lineup to use: Sydney, Melbourne, Brisbane, Perth, Adelaide, Darwin, Hobart or Canberra
+const AU_CITY = process.env.AU_CITY || 'Melbourne';
 
 const cache = new Map();
 
@@ -61,140 +62,6 @@ function playable(ch) {
     return !ch.license_url && ch.manifest !== 'mpd';
 }
 
-// --- Pluto TV (slyguy.pluto.tv.provider) ---------------------------------
-
-async function plutoSession(regionHeaders) {
-    // Same boot request the Kodi addon makes in _get_jwt()
-    const params = new URLSearchParams({
-        clientID: randomUUID(),
-        clientTime: new Date().toISOString().replace(/\.\d+Z$/, '.000Z'),
-        appName: 'web',
-        appVersion: '8.0.0-111b2b9dc00bd0bea9030b30662159ed9e7c8bc6',
-        deviceMake: 'chrome',
-        deviceType: 'web',
-        deviceModel: 'web',
-        deviceVersion: '122.0.0',
-        clientModelNumber: '1.0.0',
-        serverSideAds: 'false',
-        drmCapabilities: '',
-        blockingMode: '',
-        notificationVersion: '1',
-        appLaunchCount: '',
-        lastAppLaunchDate: '',
-        DNT: '0',
-    });
-    const res = await fetch(`https://boot.pluto.tv/v4/start?${params}`, { headers: regionHeaders });
-    if (!res.ok) throw new Error(`Pluto boot -> ${res.status}`);
-    const data = await res.json();
-    return { stitcherParams: data.stitcherParams, token: data.sessionToken };
-}
-
-const pluto = {
-    id: 'pluto',
-    name: 'Pluto TV',
-    genreMode: 'region',
-    defaultRegion: 'us',
-    // jmp2.uk resolves Pluto streams with a US session, so the static build only lists US channels
-    staticRegions: ['us'],
-    async load() {
-        const data = await fetchJson('https://i.mjh.nz/PlutoTV/.channels.json.gz');
-        const regions = {};
-        for (const [code, region] of Object.entries(data.regions)) {
-            regions[code] = {
-                name: region.name,
-                channels: Object.entries(region.channels).filter(([, ch]) => playable(ch)).map(([id, ch]) => ({
-                    id,
-                    name: ch.name,
-                    logo: ch.logo,
-                    background: ch.art,
-                    description: ch.description,
-                    group: ch.group,
-                    chno: ch.chno,
-                    programs: ch.programs,
-                    headers: mergeHeaders(data.headers, region.headers, ch.headers),
-                })),
-            };
-        }
-        return regions;
-    },
-    async resolve(region, ch) {
-        const session = await cached(`pluto-session-${region}`, 30 * 60 * 1000, () => plutoSession(ch.headers));
-        return {
-            url: `https://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/v2/stitch/hls/channel/${ch.id}/master.m3u8`
-                + `?${session.stitcherParams}&jwt=${session.token}&masterJWTPassthrough=true&includeExtendedEvents=true`,
-            headers: ch.headers,
-        };
-    },
-    // A static host can't mint a session token, so use the jmp2.uk redirector instead
-    async direct(region, ch) {
-        return { url: `https://jmp2.uk/plu-${ch.id}.m3u8`, headers: ch.headers };
-    },
-};
-
-// --- Samsung TV Plus (slyguy.samsung.tv.plus) ----------------------------
-
-const samsung = {
-    id: 'samsung',
-    name: 'Samsung TV Plus',
-    genreMode: 'region',
-    defaultRegion: 'us',
-    async load() {
-        const data = await fetchJson('https://i.mjh.nz/SamsungTVPlus/.channels.json.gz');
-        const regions = {};
-        for (const [code, region] of Object.entries(data.regions)) {
-            regions[code] = {
-                name: region.name,
-                channels: Object.entries(region.channels).filter(([, ch]) => playable(ch)).map(([id, ch]) => ({
-                    id,
-                    name: ch.name,
-                    logo: ch.logo,
-                    description: ch.description,
-                    group: ch.group,
-                    chno: ch.chno,
-                    programs: ch.programs,
-                    headers: mergeHeaders(data.headers, ch.headers),
-                    url: `https://jmp2.uk/${data.slug.replace('{id}', id)}`,
-                })),
-            };
-        }
-        return regions;
-    },
-    async resolve(region, ch) {
-        return { url: ch.url, headers: ch.headers };
-    },
-};
-
-// --- Roku (slyguy.roku) --------------------------------------------------
-
-const roku = {
-    id: 'roku',
-    name: 'The Roku Channel',
-    genreMode: 'group',
-    async load() {
-        const data = await fetchJson('https://i.mjh.nz/Roku/.channels.json.gz');
-        return {
-            all: {
-                name: 'All',
-                channels: Object.entries(data.channels).filter(([, ch]) => playable(ch)).map(([id, ch]) => ({
-                    id,
-                    name: ch.name.trim(),
-                    logo: ch.logo,
-                    background: ch.fanart,
-                    description: ch.description,
-                    group: (ch.groups || []).join(' / '),
-                    groups: ch.groups || [],
-                    chno: ch.chno,
-                    programs: ch.programs,
-                    headers: mergeHeaders(data.headers, ch.headers),
-                })),
-            },
-        };
-    },
-    async resolve(region, ch) {
-        return { url: `https://jmp2.uk/rok-${ch.id}.m3u8`, headers: ch.headers };
-    },
-};
-
 // --- AU Freeview (plugin.video.au.freeview) ------------------------------
 
 function mjhChannels(channels) {
@@ -215,20 +82,9 @@ function mjhChannels(channels) {
 const au = {
     id: 'au',
     name: 'AU Freeview',
-    genreMode: 'region',
-    defaultRegion: 'Melbourne',
     async load() {
-        const regions = {};
-        await Promise.all(AU_REGIONS.map(async (code) => {
-            try {
-                const data = await fetchJson(`https://i.mjh.nz/au/${code}/tv.json.gz`);
-                regions[code] = { name: code, channels: mjhChannels(data) };
-            } catch (err) {
-                console.error(`[au] ${code}: ${err.message}`);
-            }
-        }));
-        if (!Object.keys(regions).length) throw new Error('no AU regions loaded');
-        return regions;
+        const data = await fetchJson(`https://i.mjh.nz/au/${AU_CITY}/tv.json.gz`);
+        return { [AU_CITY]: { name: AU_CITY, channels: mjhChannels(data) } };
     },
     async resolve(region, ch) {
         return { url: ch.url, headers: ch.headers };
@@ -240,7 +96,6 @@ const au = {
 const nz = {
     id: 'nz',
     name: 'NZ Freeview',
-    genreMode: 'group',
     async load() {
         const data = await fetchJson('https://i.mjh.nz/nz/tv.json');
         return { all: { name: 'All', channels: mjhChannels(data).map((ch) => ({ ...ch, group: '' })) } };
@@ -255,8 +110,6 @@ const nz = {
 const plex = {
     id: 'plex',
     name: 'Plex Live TV',
-    genreMode: 'region',
-    defaultRegion: 'au',
     async load() {
         const data = await fetchJson('https://i.mjh.nz/Plex/.channels.json.gz');
         const regions = {};
@@ -290,7 +143,13 @@ const plex = {
     },
 };
 
-const providers = { pluto, samsung, plex, roku, au, nz };
+const providers = { au, nz, plex };
+
+// The two Stremio catalogs, each merging several sources: [provider, region, genre label]
+const catalogs = [
+    { id: 'slyguy-australia', name: 'Australia', sources: [['au', AU_CITY, 'Freeview'], ['plex', 'au', 'Plex']] },
+    { id: 'slyguy-nz', name: 'New Zealand', sources: [['nz', 'all', 'Freeview'], ['plex', 'nz', 'Plex']] },
+];
 
 // Normalised channel lists are cached per provider; see cached() for refresh behaviour.
 for (const provider of Object.values(providers)) {
@@ -308,4 +167,4 @@ async function getChannel(providerId, region, id) {
     return ch ? { provider, ch } : null;
 }
 
-module.exports = { providers, getChannel, AU_REGIONS };
+module.exports = { providers, catalogs, getChannel };
