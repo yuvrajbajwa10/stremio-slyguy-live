@@ -16,7 +16,7 @@ async function main() {
     app.get('/', (req, res) => res.redirect('/manifest.json'));
 
     app.listen(PORT, HOST, () => {
-        console.log(`SlyGuy Live TV addon running`);
+        console.log(`AU & NZ Live TV addon running`);
         console.log(`Install in Stremio: ${BASE_URL}/manifest.json`);
     });
 }

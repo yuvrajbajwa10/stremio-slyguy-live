@@ -50,9 +50,8 @@ async function buildManifest(staticMode) {
     return {
         id: staticMode ? 'community.slyguy.livetv.pages' : 'community.slyguy.livetv',
         version: pkg.version,
-        name: 'SlyGuy Live TV',
-        description: 'Top 15 Freeview channels for Australia and New Zealand, using the channel sources of the SlyGuy Kodi addons.',
-        logo: 'https://raw.githubusercontent.com/matthuisman/slyguy.addons/master/repository.slyguy/icon.png',
+        name: 'AU & NZ Live TV (unofficial)',
+        description: 'Unofficial. Top 15 free-to-air channels for Australia and New Zealand, from the broadcasters\' public streams. Not affiliated with SlyGuy, Matt Huisman or any broadcaster.',
         resources: ['catalog', 'meta', 'stream'],
         types: ['tv'],
         idPrefixes: [ID_PREFIX],

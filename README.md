@@ -1,9 +1,17 @@
-# SlyGuy Live TV for Stremio
+# AU & NZ Live TV for Stremio (unofficial)
 
 A Stremio addon with the top Freeview channels for Australia and New Zealand. It uses the same
 channel sources as the [SlyGuy Kodi addons](https://github.com/matthuisman/slyguy.addons)
 (`plugin.video.au.freeview`, `plugin.video.nz.freeview`): Matt Huisman's `i.mjh.nz` feeds, with
 now/next EPG.
+
+> **Disclaimer:** This is an unofficial, personal project. It is not affiliated with or endorsed
+> by SlyGuy, Matt Huisman, Freeview, Stremio or any broadcaster. Channel names and logos belong to
+> their owners. The addon hosts no video. It only links to free-to-air streams that the
+> broadcasters publish themselves. DRM-protected channels are left out on purpose, and
+> geo-restrictions are not bypassed. You're responsible for using it in line with the
+> broadcasters' terms of use. The local proxy is meant for your own devices, not for rebroadcasting
+> streams to other people.
 
 | Catalog | Channels |
 |---|---|
@@ -65,7 +73,8 @@ HOST=0.0.0.0 BASE_URL=http://<your-pc-lan-ip>:7000 npm start
 ```
 
 Stremio only allows non-HTTPS addon URLs on localhost, so for other devices you may need an
-HTTPS tunnel (e.g. cloudflared) and to set `BASE_URL` to the tunnel URL.
+HTTPS tunnel (e.g. cloudflared) and to set `BASE_URL` to the tunnel URL. Keep the tunnel URL to
+yourself: a publicly shared proxy would relay the broadcasters' streams to other people.
 
 ## Known limitations
 

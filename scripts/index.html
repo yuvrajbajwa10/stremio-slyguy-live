@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SlyGuy Live TV</title>
+<title>AU &amp; NZ Live TV</title>
 <style>
   :root { --bg: #f6f6f8; --fg: #1b1b22; --muted: #5d5d6b; --accent: #6a3de8; --card: #fff; }
   @media (prefers-color-scheme: dark) { :root { --bg: #121218; --fg: #ececf1; --muted: #a0a0b0; --accent: #9b7bff; --card: #1d1d26; } }
@@ -18,14 +18,17 @@
 <body>
 <main>
   <div class="card">
-    <h1>SlyGuy Live TV</h1>
+    <h1>AU &amp; NZ Live TV <small>(unofficial)</small></h1>
     <p>Top 15 Freeview channels for Australia and New Zealand in Stremio,
-      using the channel sources of the <a href="https://github.com/matthuisman/slyguy.addons">SlyGuy Kodi addons</a>.</p>
+      using the same public channel sources as the <a href="https://github.com/matthuisman/slyguy.addons">SlyGuy Kodi addons</a>.</p>
     <p><a class="button" id="install" href="#">Install in Stremio</a></p>
     <p>Or paste this into Stremio's addon search box:<br><code id="url"></code></p>
     <p class="muted">Playback needs the local server from the
       <a href="https://github.com/yuvrajbajwa10/stremio-slyguy-live">GitHub repo</a> running
       (<code>npm start</code>). The channel list and guide refresh hourly.</p>
+    <p class="muted">Unofficial, personal project. Not affiliated with or endorsed by SlyGuy, Matt Huisman or any
+      broadcaster. It only links to free-to-air streams the broadcasters publish themselves; no DRM-protected
+      or geo-restricted content is unlocked. Channel names and logos belong to their owners.</p>
   </div>
 </main>
 <script>

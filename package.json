@@ -1,7 +1,7 @@
 {
-  "name": "stremio-slyguy-live",
+  "name": "stremio-au-nz-live",
   "version": "1.0.0",
-  "description": "Stremio addon with the top Freeview channels for Australia and New Zealand, using the channel sources of the SlyGuy Kodi addons",
+  "description": "Stremio addon with the top Freeview channels for Australia and New Zealand, based on the channel sources used by the SlyGuy Kodi addons (unofficial)",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
