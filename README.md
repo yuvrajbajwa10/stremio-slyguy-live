@@ -22,19 +22,26 @@ The lists live in `src/providers.js` (`catalogs`), matched by channel name. TVNZ
 DUKE are left out because they're Widevine (DRM) protected. Set `AU_CITY` (Sydney, Melbourne,
 Brisbane, Perth, Adelaide, Darwin, Hobart or Canberra) to use another city's Freeview lineup.
 
-## Run the local server (needed for playback)
+## Two streams per channel
+
+- **Direct (Stremio app):** the broadcaster's own link. It plays in the Stremio desktop, Android
+  and TV apps with nothing else running, so the GitHub Pages install works on its own there.
+- **Local proxy (web.stremio.com):** needed when you watch in a browser tab, where the
+  broadcasters' servers block the page via CORS. It only plays while the local server is running.
+
+## Run the local server (only needed for web.stremio.com)
 
 ```sh
 npm install
 npm start
 ```
 
-Streams play through a small HLS proxy in this server (see below), so it has to be running while
-you watch.
+The proxy stream goes through a small HLS proxy in this server (see below), so it has to be
+running while you watch in a browser.
 
 ## Install
 
-Either addon URL works, as long as `npm start` is running:
+Either addon URL works (the proxy stream needs `npm start` running):
 
 - **Local:** `http://127.0.0.1:7000/manifest.json` (guide is always current).
 - **GitHub Pages:** https://yuvrajbajwa10.github.io/stremio-slyguy-live/ (click **Install in
@@ -52,7 +59,7 @@ run `npm run build` (output goes to `dist/`).
 
 The Kodi addons send provider-specific headers (such as the user-agent). A browser can't send
 these, and several CDNs don't allow web.stremio.com via CORS.
-So every stream goes through the proxy (`/hls/...`), which fetches playlists and segments with the
+So in a browser the stream goes through the proxy (`/hls/...`), which fetches playlists and segments with the
 right headers, rewrites the playlist URIs and serves everything with
 `Access-Control-Allow-Origin: *`.
 

@@ -60,8 +60,9 @@ async function buildManifest(staticMode) {
     };
 }
 
-// staticMode: build for a static host (GitHub Pages). Only the manifest ID differs; streams
-// still point at the local proxy, which has to be running for playback.
+// staticMode: build for a static host (GitHub Pages). The manifest ID differs and the direct
+// stream is listed first, so the Stremio apps play with no server running. The local-proxy
+// stream is still listed for web.stremio.com, where it needs `npm start`.
 async function createAddon(baseUrl, { staticMode = false } = {}) {
     const builder = new addonBuilder(await buildManifest(staticMode));
 
@@ -101,13 +102,20 @@ async function createAddon(baseUrl, { staticMode = false } = {}) {
         const { providerId, region, id: channelId } = parseMetaId(id);
         const found = await getChannel(providerId, region, channelId);
         if (!found) return { streams: [] };
-        return {
-            streams: [{
-                url: `${baseUrl}/hls/${providerId}/${encodeURIComponent(region)}/${encodeURIComponent(channelId)}/index.m3u8`,
-                name: found.provider.name,
-                title: `${found.ch.name}\nLive`,
-            }],
+        const { url: directUrl } = await found.provider.resolve(region, found.ch);
+        // The broadcaster's own link: plays in the Stremio apps (native player, no CORS), no server needed
+        const direct = {
+            url: directUrl,
+            name: found.provider.name,
+            title: `${found.ch.name}\nDirect (Stremio app)`,
         };
+        // Through the local proxy: needed in a browser tab (web.stremio.com), requires `npm start`
+        const proxy = {
+            url: `${baseUrl}/hls/${providerId}/${encodeURIComponent(region)}/${encodeURIComponent(channelId)}/index.m3u8`,
+            name: found.provider.name,
+            title: `${found.ch.name}\nLocal proxy (web.stremio.com)`,
+        };
+        return { streams: staticMode ? [direct, proxy] : [proxy, direct] };
     });
 
     return builder.getInterface();
