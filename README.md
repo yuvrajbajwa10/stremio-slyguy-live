@@ -10,8 +10,7 @@ now/next EPG.
 > their owners. The addon hosts no video. It only links to free-to-air streams that the
 > broadcasters publish themselves. DRM-protected channels are left out on purpose, and
 > geo-restrictions are not bypassed. You're responsible for using it in line with the
-> broadcasters' terms of use. The local proxy is meant for your own devices, not for rebroadcasting
-> streams to other people.
+> broadcasters' terms of use.
 
 | Catalog | Channels |
 |---|---|
@@ -22,69 +21,32 @@ The lists live in `src/providers.js` (`catalogs`), matched by channel name. TVNZ
 DUKE are left out because they're Widevine (DRM) protected. Set `AU_CITY` (Sydney, Melbourne,
 Brisbane, Perth, Adelaide, Darwin, Hobart or Canberra) to use another city's Freeview lineup.
 
-## Two streams per channel
+## Install
 
-- **Direct (Stremio app):** the broadcaster's own link. It plays in the Stremio desktop, Android
-  and TV apps with nothing else running, so the GitHub Pages install works on its own there.
-- **Local proxy (web.stremio.com):** needed when you watch in a browser tab, where the
-  broadcasters' servers block the page via CORS. It only plays while the local server is running.
+Open https://yuvrajbajwa10.github.io/stremio-slyguy-live/ and click **Install in Stremio**. Then
+open **Discover → TV** and pick **Australia Top 15** or **New Zealand Top 15**.
 
-## Run the local server (only needed for web.stremio.com)
+Nothing has to run on your computer. The addon is a static copy on GitHub Pages, rebuilt hourly
+by GitHub Actions, so the now/next guide can be up to an hour old (times in Australia/Melbourne
+time). Each channel links straight to the broadcaster's own stream.
+
+GitHub pauses scheduled workflows after 60 days without repository activity. If the guide stops
+updating, re-enable the workflow from the Actions tab.
+
+## Development
 
 ```sh
 npm install
-npm start
+npm start        # local copy at http://127.0.0.1:7000/manifest.json
+npm run build    # static copy in dist/
 ```
 
-The proxy stream goes through a small HLS proxy in this server (see below), so it has to be
-running while you watch in a browser.
-
-## Install
-
-Either addon URL works (the proxy stream needs `npm start` running):
-
-- **Local:** `http://127.0.0.1:7000/manifest.json` (guide is always current).
-- **GitHub Pages:** https://yuvrajbajwa10.github.io/stremio-slyguy-live/ (click **Install in
-  Stremio**). A static copy rebuilt hourly by GitHub Actions, so the now/next guide can be up to
-  an hour old (times in Australia/Melbourne time).
-
-Install only one of them, or the channels appear twice. In Stremio, open **Discover → TV** and
-pick **Australia Top 15** or **New Zealand Top 15**.
-
-GitHub pauses scheduled workflows after 60 days without repository activity. If the Pages guide
-stops updating, re-enable the workflow from the Actions tab. To build the static copy yourself,
-run `npm run build` (output goes to `dist/`).
-
-## How playback works
-
-The Kodi addons send provider-specific headers (such as the user-agent). A browser can't send
-these, and several CDNs don't allow web.stremio.com via CORS.
-So in a browser the stream goes through the proxy (`/hls/...`), which fetches playlists and segments with the
-right headers, rewrites the playlist URIs and serves everything with
-`Access-Control-Allow-Origin: *`.
-
-Two details make it work in web Stremio:
-
-- The playlist is served as exactly `application/vnd.apple.mpegurl` (no charset). Stremio's web
-  player only uses hls.js when the content type matches exactly.
-- If the Stremio app's streaming server is running, the web player probes streams with ffmpeg and
-  sends playable ones through its converter, which rejects live streams. The proxy refuses that
-  probe (user-agent `Lavf/...`) so the player falls back to hls.js.
-
-## Other devices
-
-To use the addon from a phone or TV on your network:
-
-```sh
-HOST=0.0.0.0 BASE_URL=http://<your-pc-lan-ip>:7000 npm start
-```
-
-Stremio only allows non-HTTPS addon URLs on localhost, so for other devices you may need an
-HTTPS tunnel (e.g. cloudflared) and to set `BASE_URL` to the tunnel URL. Keep the tunnel URL to
-yourself: a publicly shared proxy would relay the broadcasters' streams to other people.
+Don't install the local and the Pages copy together, or the channels appear twice.
 
 ## Known limitations
 
+- It plays in the Stremio desktop, Android and TV apps, not in a browser tab (web.stremio.com).
+  The broadcasters' servers don't allow that page to fetch their streams (CORS).
 - Channels are geo-restricted by the providers. From Australia, only Whakaata Māori, HGTV,
   Al Jazeera, Te Reo and Parliament TV play from the NZ list; Three, Sky Open, Bravo, Rush, eden
   and Trackside are NZ-only.

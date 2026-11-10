@@ -1,13 +1,11 @@
 // Builds a static copy of the addon (manifest, catalogs, metas, streams) into dist/ for GitHub Pages.
 // Usage: node scripts/build-static.js [outDir]
-// LOCAL_PROXY_URL sets the base of the secondary "local proxy" stream (default http://127.0.0.1:7000).
 
 const fs = require('fs');
 const path = require('path');
 const { createAddon } = require('../src/addon');
 
 const OUT = path.resolve(process.argv[2] || 'dist');
-const LOCAL_PROXY_URL = process.env.LOCAL_PROXY_URL || 'http://127.0.0.1:7000';
 // Characters that can't appear in a file name (on Linux or Windows)
 const BAD_NAME = /[\/\\:*?"<>|]/;
 
@@ -19,7 +17,7 @@ function write(rel, data) {
 
 async function main() {
     fs.rmSync(OUT, { recursive: true, force: true });
-    const addon = await createAddon(LOCAL_PROXY_URL, { staticMode: true });
+    const addon = await createAddon({ staticMode: true });
     const { manifest } = addon;
 
     for (const catalog of manifest.catalogs) {
